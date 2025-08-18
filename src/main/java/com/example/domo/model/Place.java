@@ -1,8 +1,8 @@
-// src/main/java/com/example/domo/model/Place.java
 package com.example.domo.model;
 
 public class Place {
 
+    private Long id;
     private String name;
     private String category;
     private String address;
@@ -12,13 +12,17 @@ public class Place {
     private String sigungu;
 
     // ====== 정렬/점수 계산에 필요한 지표 ======
-    private double distance;      // km
-    private int discountPercent;  // DB discountpercent
+    private double distance;
+    private int discountPercent;
     private int popularity;       // 없으면 0
     private int distanceScore;
     private int benefitScore;
     private int popularScore;
     private int totalScore;
+
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
     // ====== getters / setters ======
     public double getDistance() { return distance; }
@@ -42,7 +46,6 @@ public class Place {
     public int getTotalScore() { return totalScore; }
     public void setTotalScore(int totalScore) { this.totalScore = totalScore; }
 
-    // 편의 메서드(선택)
     public void updateScores(int distanceScore, int benefitScore, int popularScore) {
         this.distanceScore = distanceScore;
         this.benefitScore = benefitScore;

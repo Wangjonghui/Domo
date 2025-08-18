@@ -1,109 +1,140 @@
 package com.example.domo.service;
 
+import com.example.domo.controller.dto.ItineraryScoreResponse;
+import com.example.domo.model.Itinerary;
 import com.example.domo.model.Place;
 import com.example.domo.util.HaversineUtil;
 import org.springframework.stereotype.Service;
-
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 @Service
 public class ScoreServiceImpl implements ScoreService {
 
-    private static final double MAX_ITEM_DIST_KM = 20.0; // 개별 장소 점수용
-    private static final double MAX_ROUTE_KM     = 60.0; // 일정(루트) 점수용
+    // ===== 일정용 =====
+    @Override
+    public int calcDistanceScore(double totalDistanceKm) {
+        if (totalDistanceKm <= 2)  return 100;
+        if (totalDistanceKm <= 5)  return 80;
+        if (totalDistanceKm <= 10) return 60;
+        if (totalDistanceKm <= 20) return 40;
+        if (totalDistanceKm <= 40) return 20;
+        return 0;
+    }
 
+    @Override
+    public void updatePlaceScores(Itinerary itinerary) {
+        int distanceScore = calcDistanceScore(itinerary.getTotalDistanceKm());
+        if (itinerary.getSteps() == null) return;
+
+        for (Place p : itinerary.getSteps()) {
+            int total = distanceScore + p.getBenefitScore() + p.getPopularScore();
+            p.setDistanceScore(distanceScore);
+            p.setTotalScore(total);
+        }
+    }
+
+    private static final double WD = 0.4; //
+    private static final double WB = 0.2; //
+    private static final double WP = 0.4; //
     @Override
     public void applyScores(List<Place> places, Double userLat, Double userLng) {
-        if (userLat != null && userLng != null) {
-            for (Place p : places) {
-                double dKm = 0.0;
-                if (p.getLat() != 0.0 && p.getLng() != 0.0) {
-                    dKm = HaversineUtil.distanceKm(userLat, userLng, p.getLat(), p.getLng());
-                }
-                p.setDistance(dKm);
-            }
-        } else {
-            for (Place p : places) p.setDistance(0.0);
-        }
+        if (places == null || places.isEmpty()) return;
+
 
         for (Place p : places) {
-            int distanceScore;
-            if (p.getDistance() <= 0) distanceScore = 100;
-            else if (p.getDistance() >= MAX_ITEM_DIST_KM) distanceScore = 0;
-            else distanceScore = (int)Math.round(100.0 * (1.0 - (p.getDistance() / MAX_ITEM_DIST_KM)));
+            if (Double.isNaN(p.getDistance()) && userLat != null && userLng != null) {
+                double dKm = HaversineUtil.distanceKm(userLat, userLng, p.getLat(), p.getLng());
+                p.setDistance(dKm);
+            }
 
-            int benefitScore = clamp(p.getDiscountPercent(), 0, 100);
-            int popularScore = clamp(p.getPopularity(), 0, 100);
+            int distanceScore;
+            double d = p.getDistance();
+            if (d <= 0.5)      distanceScore = 100;
+            else if (d <= 1.5) distanceScore = 90;
+            else if (d <= 3)   distanceScore = 75;
+            else if (d <= 5)   distanceScore = 60;
+            else if (d <= 10)  distanceScore = 40;
+            else if (d <= 20)  distanceScore = 20;
+            else               distanceScore = 0;
 
             p.setDistanceScore(distanceScore);
-            p.setBenefitScore(benefitScore);
-            p.setPopularScore(popularScore);
-            p.setTotalScore(distanceScore + benefitScore + popularScore);
+
+            int benefit = Math.max(0, Math.min(100, p.getDiscountPercent()));
+            p.setBenefitScore(benefit);
+
+            int popular = Math.max(0, Math.min(100, p.getPopularity()));
+            p.setPopularScore(popular);
+
+            int total = (int)Math.round(WD * p.getDistanceScore()
+                    + WB * p.getBenefitScore()
+                    + WP * p.getPopularScore());
+            p.setTotalScore(total);
         }
     }
 
     @Override
-    public Comparator<Place> sortBy(String sort) {
-        String key = (sort == null ? "" : sort).toLowerCase(Locale.ROOT);
-        switch (key) {
-            case "benefit": case "discount": case "할인순":
-                return Comparator.comparingInt(Place::getBenefitScore).reversed()
-                        .thenComparingInt(Place::getPopularScore).reversed()
-                        .thenComparingDouble(Place::getDistance);
-            case "popular": case "popularity": case "인기순":
-                return Comparator.comparingInt(Place::getPopularScore).reversed()
-                        .thenComparingInt(Place::getBenefitScore).reversed()
-                        .thenComparingDouble(Place::getDistance);
-            case "distance": case "거리순":
-                return Comparator.comparingDouble(Place::getDistance)
-                        .thenComparingInt(Place::getBenefitScore).reversed()
-                        .thenComparingInt(Place::getPopularScore).reversed();
-            case "total": case "score": case "종합순":
-            default:
-                return Comparator.comparingInt(Place::getTotalScore).reversed()
-                        .thenComparingInt(Place::getBenefitScore).reversed()
-                        .thenComparingInt(Place::getPopularScore).reversed()
-                        .thenComparingDouble(Place::getDistance);
+    public Comparator<Place> sortBy(String key) {
+        if (key == null) key = "total";
+        return switch (key.toLowerCase()) {
+            case "benefit"  -> Comparator.comparingInt(Place::getBenefitScore).reversed();
+            case "popular"  -> Comparator.comparingInt(Place::getPopularScore).reversed();
+            case "distance" -> Comparator.comparingDouble(Place::getDistance); // 가까운 순
+            default         -> Comparator.comparingInt(Place::getTotalScore).reversed(); // total
+        };
+    }
+
+    @Override
+    public ItineraryScoreResponse buildResponse(Itinerary itin, boolean includePlaceScores) {
+        // NPE 가드
+        if (itin == null || itin.getSteps() == null || itin.getSteps().isEmpty()) {
+            return ItineraryScoreResponse.of(itin == null ? new Itinerary() : itin, 0, 0, 0, includePlaceScores);
         }
-    }
 
-    // ---------- 추가: 일정(루트) 점수 계산 ----------
+        double routeKm = itin.getTotalDistanceKm();
+        int distScore = distanceScore(routeKm); // 0~100
+
+        // 1) 각 장소에 원시 점수 설정 + 가중 total 설정
+        for (Place p : itin.getSteps()) {
+            p.setDistanceScore(distScore);
+            int benefit = Math.max(0, Math.min(100, p.getDiscountPercent()));
+            int popular = Math.max(0, Math.min(100, p.getPopularity()));
+            p.setBenefitScore(benefit);
+            p.setPopularScore(popular);
+
+            int totalWeighted = (int)Math.round(
+                    WD * p.getDistanceScore() +
+                            WB * p.getBenefitScore() +
+                            WP * p.getPopularScore()
+            );
+            p.setTotalScore(totalWeighted);
+        }
+
+        // 2) 일정 레벨 요약(평균)
+        int benefitAvg = (int)Math.round(itin.getSteps().stream()
+                .mapToInt(Place::getBenefitScore).average().orElse(0));
+        int popularAvg = (int)Math.round(itin.getSteps().stream()
+                .mapToInt(Place::getPopularScore).average().orElse(0));
+
+        // 3) 상단 total도 가중합이 되도록 "가중 기여치"로 전달
+        int distW = (int)Math.round(WD * distScore);
+        int beneW = (int)Math.round(WB * benefitAvg);
+        int popW  = (int)Math.round(WP * popularAvg);
+
+        // of()가 세 값을 합쳐 totalScore를 만들므로, 가중 기여치로 넘겨 일관성 유지
+        return ItineraryScoreResponse.of(
+                itin,
+                distW,  // distanceScore 필드는 '가중 기여치'로 표시됨
+                beneW,  // benefitScore(가중)
+                popW,   // popularScore(가중)
+                includePlaceScores
+        );
+    }
 
     @Override
-    public int toRouteDistanceScore(double routeKm) {
-        if (routeKm <= 0) return 100;
-        if (routeKm >= MAX_ROUTE_KM) return 0;
-        return (int)Math.round(100.0 * (1.0 - (routeKm / MAX_ROUTE_KM)));
-    }
-
-    @Override
-    public int averageBenefitScore(List<Place> orderedPlaces) {
-        if (orderedPlaces == null || orderedPlaces.isEmpty()) return 0;
-        double avg = orderedPlaces.stream()
-                .mapToInt(p -> clamp(p.getDiscountPercent(), 0, 100))
-                .average().orElse(0.0);
-        return (int)Math.round(avg);
-    }
-
-    @Override
-    public int averagePopularScore(List<Place> orderedPlaces) {
-        if (orderedPlaces == null || orderedPlaces.isEmpty()) return 0;
-        double avg = orderedPlaces.stream()
-                .mapToInt(p -> clamp(p.getPopularity(), 0, 100))
-                .average().orElse(0.0);
-        return (int)Math.round(avg);
-    }
-
-    @Override
-    public int routeTotalScore(int distanceScore, int benefitScore, int popularScore) {
-        // 필요하면 가중치 변경 (예: 거리 50%, 혜택 30%, 인기 20%)
-        // return (int)Math.round(distanceScore*0.5 + benefitScore*0.3 + popularScore*0.2);
-        return distanceScore + benefitScore + popularScore;
-    }
-
-    private static int clamp(int v, int min, int max) {
-        return Math.max(min, Math.min(max, v));
+    public int distanceScore(double routeKm) {
+        double clamped = Math.max(0, Math.min(200.0, routeKm));
+        double score = 100.0 * (1.0 - (clamped / 200.0));
+        return (int) Math.round(score);
     }
 }
