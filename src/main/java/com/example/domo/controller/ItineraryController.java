@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -38,11 +39,10 @@ public class ItineraryController {
 
     @PostMapping("/score")
     public ResponseEntity<ItineraryScoreResponse> score(@Valid @RequestBody ItineraryScoreRequest req) {
-        List<Long> placeIds = req.getPlaceIds();
+        List<UUID> placeIds = req.getPlaceIds();
 
-        // 1) 장소 로드 (ID 순서 보존)
         List<Place> found = placeRepository.findByIds(placeIds);
-        Map<Long, Place> byId = found.stream()
+        Map<UUID, Place> byId = found.stream()
                 .collect(Collectors.toMap(Place::getId, Function.identity()));
 
         List<Place> loadedPlaces = placeIds.stream()

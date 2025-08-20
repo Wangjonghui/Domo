@@ -5,10 +5,11 @@ import jakarta.validation.constraints.NotNull;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 public class ItineraryScoreRequest {
 
-    private List<Long> placeIds = Collections.emptyList();
+    private List<UUID> placeIds = Collections.emptyList();
 
     private List<Double> legsKm = Collections.emptyList();
 
@@ -25,8 +26,8 @@ public class ItineraryScoreRequest {
         return legsKm.size() == placeIds.size() - 1;
     }
 
-    public List<Long> getPlaceIds() { return placeIds; }
-    public void setPlaceIds(List<Long> placeIds) {
+    public List<UUID> getPlaceIds() { return placeIds; }
+    public void setPlaceIds(List<UUID> placeIds) {
         this.placeIds = (placeIds == null) ? new ArrayList<>() : new ArrayList<>(placeIds);
     }
 

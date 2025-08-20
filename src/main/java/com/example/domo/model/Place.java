@@ -1,8 +1,10 @@
 package com.example.domo.model;
 
+import java.util.UUID;
+
 public class Place {
 
-    private Long id;
+    private UUID id;
     private String name;
     private String category;
     private String address;
@@ -21,8 +23,8 @@ public class Place {
     private int totalScore;
 
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
 
     // ====== getters / setters ======
     public double getDistance() { return distance; }

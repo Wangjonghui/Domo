@@ -22,16 +22,17 @@ public class SupabaseServiceImpl implements SupabaseService {
     }
 
     @Override
-    public List<Place> fetchPlacesInOrder(List<Long> placeIds) {
+    public List<Place> fetchPlacesInOrder(List<UUID> placeIds) {
         if (placeIds == null || placeIds.isEmpty()) return Collections.emptyList();
 
-        Map<Long, Integer> order = new HashMap<>();
+        Map<UUID, Integer> order = new HashMap<>();
         for (int i = 0; i < placeIds.size(); i++) order.put(placeIds.get(i), i);
 
         List<Place> fetched = placeRepository.findByIds(placeIds);
 
         return fetched.stream()
                 .sorted(Comparator.comparingInt(p -> order.getOrDefault(p.getId(), Integer.MAX_VALUE)))
-                .collect(Collectors.toList());
+                .toList();
     }
+
 }
