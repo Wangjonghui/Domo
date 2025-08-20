@@ -1,129 +1,80 @@
-// src/main/java/com/example/domo/repository/PlaceRepository.java
 package com.example.domo.repository;
 
 import com.example.domo.model.Place;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.*;
 
 @Repository
 public class PlaceRepository {
 
-    private final JdbcTemplate jdbc;
+    private final NamedParameterJdbcTemplate jdbc;
 
-    public PlaceRepository(JdbcTemplate jdbc) {
+    private static final RowMapper<Place> ROW_MAPPER = (rs, rowNum) -> {
+        Place p = new Place();
+
+        UUID uuid = null;
+        try { uuid = rs.getObject("id", UUID.class); } catch (Exception ignore) {}
+        if (uuid == null) {
+            try { uuid = rs.getObject("place_id", UUID.class); } catch (Exception ignore) {}
+        }
+        p.setId(uuid);
+
+        p.setName(rs.getString("name"));
+        p.setCategory(rs.getString("category"));
+        p.setAddress(rs.getString("address"));
+        p.setLat(rs.getDouble("lat"));
+        p.setLng(rs.getDouble("lng"));
+        p.setSido(rs.getString("sido"));
+        p.setSigungu(rs.getString("sigungu"));
+        p.setDiscountPercent(rs.getInt("discountpercent"));
+        p.setPopularity(rs.getInt("popularity"));
+        return p;
+    };
+
+    public PlaceRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
-    /** 시/도 + 시군구(선택)로 조회 */
-    public List<Place> findByRegion(String sido, String sigungu, int limit, int offset) {
-        StringBuilder sql = new StringBuilder("""
-        select
-            place_id,
-            name,
-            category,
-            address,
-            lat,
-            lng,
-            sido,
-            sigungu,
-            coalesce(discountpercent, 0) as discountpercent,
-            /* popularity 컬럼이 없을 가능성 대비 */
-            0 as popularity
-        from public.places
-        where 1=1
-    """);
-
-        List<Object> params = new java.util.ArrayList<>();
-
-        if (sido != null && !sido.isBlank()) {
-            sql.append(" and sido = ? ");
-            params.add(sido);
-        }
-        if (sigungu != null && !sigungu.isBlank()) {
-            sql.append(" and sigungu = ? ");
-            params.add(sigungu);
-        }
-
-        sql.append(" order by name limit ? offset ? ");
-        params.add(limit);
-        params.add(offset);
-
-        return jdbc.query(sql.toString(), params.toArray(), new PlaceRowMapper());
-    }
-
-    /** place_id 목록으로 조회 */
-    public List<Place> findByIds(List<UUID> placeIds) {
-        if (placeIds == null || placeIds.isEmpty()) return Collections.emptyList();
-        String placeholders = placeIds.stream().map(id -> "?").collect(Collectors.joining(","));
+    public List<Place> findByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return Collections.emptyList();
         String sql = """
-            select
-                place_id,
-                name,
-                category,
-                address,
-                lat,
-                lng,
-                sido,
-                sigungu,
-                coalesce(discountpercent, 0) as discountpercent,
-                coalesce(popularity, 0)      as popularity
-            from public.places
-            where place_id in (%s)
-        """.formatted(placeholders);
-        return jdbc.query(sql, placeIds.toArray(), new PlaceRowMapper());
-    }
-
-    /** 이름/주소 키워드 검색(선택 기능) */
-    public List<Place> search(String keyword, int limit, int offset) {
-        String like = "%" + keyword + "%";
-        String sql = """
-            select
-                place_id,
-                name,
-                category,
-                address,
-                lat,
-                lng,
-                sido,
-                sigungu,
-                coalesce(discountpercent, 0) as discountpercent,
-                coalesce(popularity, 0)      as popularity
-            from public.places
-            where name ilike ? or address ilike ?
-            order by name
-            limit ? offset ?
+        SELECT place_id AS id,                  -- ★ alias
+               name, category, address, lat, lng, sido, sigungu,
+               COALESCE(benefitvalue, 0)    AS benefitvalue,
+               COALESCE(discountpercent, 0) AS discountpercent,
+               COALESCE(popularity, 0)      AS popularity,
+               COALESCE(totalscore, 0)      AS totalscore
+        FROM places
+        WHERE place_id IN (:ids)               -- ★ 실제 컬럼명
         """;
-        return jdbc.query(sql, new Object[]{like, like, limit, offset}, new PlaceRowMapper());
+        Map<String,Object> p = new HashMap<>();
+        p.put("ids", ids);
+        return jdbc.query(sql, p, ROW_MAPPER);
     }
 
-    /** 공통 매핑 */
-    private static class PlaceRowMapper implements RowMapper<Place> {
-        @Override
-        public Place mapRow(ResultSet rs, int rowNum) throws SQLException {
-            Place p = new Place();
-            p.setName(rs.getString("name"));
-            p.setCategory(rs.getString("category"));
-            p.setAddress(rs.getString("address"));
-            p.setLat(safeDouble(rs, "lat"));
-            p.setLng(safeDouble(rs, "lng"));
-            p.setSido(rs.getString("sido"));
-            p.setSigungu(rs.getString("sigungu"));
-            p.setDiscountPercent(rs.getInt("discountpercent"));
-            p.setPopularity(rs.getInt("popularity"));
-            // 거리/점수는 런타임 계산
-            return p;
-        }
-        private static double safeDouble(ResultSet rs, String col) throws SQLException {
-            double v = rs.getDouble(col);
-            return rs.wasNull() ? 0.0 : v;
-        }
+
+    public List<Place> searchByRegion(String sido, String sigungu, int limit, int offset) {
+        StringBuilder sql = new StringBuilder(""" 
+        SELECT place_id AS id, 
+            name, category, address, lat, lng, sido, sigungu, 
+            COALESCE(benefitvalue, 0) AS benefitvalue, 
+            COALESCE(discountpercent, 0) AS discountpercent, 
+            COALESCE(popularity, 0) AS popularity, 
+            COALESCE(totalscore, 0) AS totalscore 
+        FROM places
+        WHERE 1=1 
+        """);
+
+        Map<String,Object> p = new HashMap<>();
+        if (sido != null && !sido.isBlank()) {
+            sql.append(" AND sido = :sido"); p.put("sido", sido);
+        } if (sigungu != null && !sigungu.isBlank()) {
+            sql.append(" AND sigungu = :sigungu"); p.put("sigungu", sigungu);
+        } sql.append(" ORDER BY id DESC LIMIT :limit OFFSET :offset");
+        p.put("limit", Math.max(0, limit)); p.put("offset", Math.max(0, offset));
+        return jdbc.query(sql.toString(), p, ROW_MAPPER);
     }
 }

@@ -1,21 +1,41 @@
 package com.example.domo.controller.dto;
 
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
+
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 public class ItineraryScoreRequest {
-    // GPT가 만든 방문 순서대로의 place_id 문자열(UUID 문자열) 리스트
-    private List<String> placeIds;
 
-    // 선택: GPT가 구간별 거리(km)를 미리 계산해 줄 수도 있음 (없으면 서버가 좌표로 계산)
-    private List<Double> legsKm;
+    private List<UUID> placeIds;
+
+    private List<Double> legsKm = Collections.emptyList();
 
     private boolean includePlaceScores;
 
-    public List<String> getPlaceIds() { return placeIds; }
-    public void setPlaceIds(List<String> placeIds) { this.placeIds = placeIds; }
+    @NotNull
+    private Boolean preferClientLegs = Boolean.FALSE;
+    public Boolean getPreferClientLegs() { return preferClientLegs; }
+
+    @AssertTrue(message = "legsKm의 크기는 placeIds.size() - 1 이어야 합니다.")
+    public boolean isLegsKmSizeValid() {
+        if (placeIds == null || placeIds.isEmpty()) return false;
+        if (legsKm == null || legsKm.isEmpty()) return true;
+        return legsKm.size() == placeIds.size() - 1;
+    }
+
+    public List<UUID> getPlaceIds() { return placeIds; }
+    public void setPlaceIds(List<UUID> placeIds) {
+        this.placeIds = placeIds;
+    }
 
     public List<Double> getLegsKm() { return legsKm; }
-    public void setLegsKm(List<Double> legsKm) { this.legsKm = legsKm; }
+    public void setLegsKm(List<Double> legsKm) {
+        this.legsKm = (legsKm == null) ? new ArrayList<>() : new ArrayList<>(legsKm);
+    }
 
     public boolean isIncludePlaceScores() { return includePlaceScores; }
     public void setIncludePlaceScores(boolean includePlaceScores) { this.includePlaceScores = includePlaceScores; }
