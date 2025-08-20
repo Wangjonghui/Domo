@@ -16,7 +16,7 @@ public class HaversineUtil {
         }
     }
 
-    public static double haversine(double lat1, double lng1, double lat2, double lng2) {
+    public static double distanceKm(double lat1, double lng1, double lat2, double lng2) {
         final int R = 6371; // 지구 반경 km
         double latRad1 = Math.toRadians(lat1);
         double latRad2 = Math.toRadians(lat2);
@@ -44,7 +44,7 @@ public class HaversineUtil {
             Place start = places.get(i);
             Place end = places.get(i + 1);
 
-            double distance = haversine(start.lat, start.lng, end.lat, end.lng);
+            double distance = distanceKm(start.lat, start.lng, end.lat, end.lng);
             System.out.printf("%s → %s: %.2f km\n", start.name, end.name, distance);
         }
     }
